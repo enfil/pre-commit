@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+
+##################
+## SETTINGS ##
+##################
+# ENABLE DEBUG MODE
+DEBUG=false
+# DOCKER PHP-CONTAINER
+DOCKER_CONTAINER_NAME=php
+DOCKER_CONTAINER_USER=nginx
+# TEMPORARY DIR FOR STAGED FILES
+TMP_STAGING="temp/tmp_staging"
+# ENABLE CHECKERS
+PHP_CS_CHECK=true
+PHP_STAN_CHECK=true
+PHP_DEPTRAC=true
+PHP_UNIT_CHECK=true
+# OTHER SETTINGS
+PHP_CS_CONFIG_PATH=phpcs.xml
+PHP_STAN_MEMORY_LIMIT=4G
+PHP_STAN_BIN_PATH=vendor/bin/phpstan
+DEPTRAC_CONFIG_FILE=deptrac.phar
+UNIT_TESTS_BIN_PATH=vendor/bin/codecept
+
+C_RESET='\e[0m'
+C_RED='\e[31m'
+C_GREEN='\e[32m'
+C_YELLOW='\e[33m'
+
+FILES=$(git diff --diff-filter=AMCR --name-only --cached -- '***.php')
+if [ "$FILES" == "" ]; then
+    echo -e "${C_YELLOW}NO STAGED FILES TO CHECK${C_RESET}"
+    exit 0
+fi
+
+if [ -e $TMP_STAGING ]; then
+    rm -rf $TMP_STAGING
+fi
+mkdir $TMP_STAGING
+
+STAGED_FILES=""
+for FILE in $FILES
+do
+  ID=$(git diff-index --cached HEAD "$FILE" | cut -d " " -f4)
+
+  # create staged version of file in temporary staging area with the same
+  # path as the original file so that the phpcs ignore filters can be applied
+  mkdir -p "$TMP_STAGING/$(dirname "$FILE")"
+  git cat-file blob "$ID" > "$TMP_STAGING/$FILE"
+  STAGED_FILES="$STAGED_FILES $TMP_STAGING/$FILE"
+done
+
+##################
+## CODE SNIFFER ##
+##################
+printf "${C_YELLOW}[1/4]${C_RESET} code sniffer "
+if $PHP_CS_CHECK; then
+    OUTPUT_CS=$(docker exec -t --user $DOCKER_CONTAINER_USER $DOCKER_CONTAINER_NAME vendor/bin/phpcs -p --standard=$PHP_CS_CONFIG_PATH ${STAGED_FILES})
+    EXIT_CODE=$?
+
+    if [[ 0 == "$EXIT_CODE" || 130 == "$EXIT_CODE" ]]; then
+        echo -e "${C_GREEN}OK!${C_RESET}"
+        if $DEBUG; then
+            echo -e "\n\n$OUTPUT_CS"
+        fi
+    else
+        echo -e "${C_RED}NOT OK!${C_RESET}\n\n$OUTPUT_CS"
+        exit 1
+    fi
+else
+   echo -e "${C_YELLOW}DISABLED!${C_RESET}"
+fi
+
+##################
+##   PHP STAN   ##
+##################
+printf "${C_YELLOW}[2/4]${C_RESET} phpstan "
+if $PHP_STAN_CHECK; then
+    OUTPUT_STAN=$(docker exec -t --user $DOCKER_CONTAINER_USER $DOCKER_CONTAINER_NAME php -d memory_limit=$PHP_STAN_MEMORY_LIMIT $PHP_STAN_BIN_PATH analyse ${STAGED_FILES})
+    EXIT_CODE=$?
+    if [[ 0 == "$EXIT_CODE" || 130 == "$EXIT_CODE" ]]; then
+        echo -e "${C_GREEN}OK!${C_RESET}"
+        if $DEBUG; then
+            echo -e "\n\n"
+            echo "$OUTPUT_STAN"
+        fi
+    else
+        echo -e "${C_RED}NOT OK!${C_RESET}\n\n"
+        echo "$OUTPUT_STAN"
+        exit 1
+    fi
+else
+   echo -e "${C_YELLOW}DISABLED!${C_RESET}"
+fi
+
+##################
+##   DEPTRAC    ##
+##################
+printf "${C_YELLOW}[3/4]${C_RESET} deptrac "
+if $PHP_DEPTRAC; then
+    OUTPUT_DEPTRAC=$(docker exec -t --user $DOCKER_CONTAINER_USER $DOCKER_CONTAINER_NAME php -d error_reporting="E_ERROR | E_PARSE" $DEPTRAC_CONFIG_FILE analyze)
+    EXIT_CODE=$?
+    if [[ 0 == "$EXIT_CODE" || 130 == "$EXIT_CODE" ]]; then
+        echo -e "${C_GREEN}OK!${C_RESET}"
+        if $DEBUG; then
+            echo -e "\n\n"
+            echo "$OUTPUT_DEPTRAC"
+        fi
+    else
+        echo -e "${C_RED}NOT OK!${C_RESET}\n\n$OUTPUT_DEPTRAC"
+        exit 1
+    fi
+else
+   echo -e "${C_YELLOW}DISABLED!${C_RESET}"
+fi
+
+rm -r ${TMP_STAGING}
+
+if $DEBUG; then
+    exit 1
+fi
+
+##################
+##  UNIT TESTS  ##
+##################
+printf "${C_YELLOW}[4/4]${C_RESET} unit-tests "
+if $PHP_UNIT_CHECK; then
+    OUTPUT_UNIT=$(docker exec -t --user $DOCKER_CONTAINER_USER $DOCKER_CONTAINER_NAME php $UNIT_TESTS_BIN_PATH run)
+    EXIT_CODE=$?
+    if [[ 0 == "$EXIT_CODE" || 130 == "$EXIT_CODE" ]]; then
+        echo -e "${C_GREEN}OK!${C_RESET}"
+        if $DEBUG; then
+            echo -e "\n\n"
+            echo "$OUTPUT_UNIT"
+        fi
+    else
+        echo -e "${C_RED}NOT OK!${C_RESET}\n\n$OUTPUT_UNIT"
+        exit 1
+    fi
+else
+   echo -e "${C_YELLOW}DISABLED!${C_RESET}"
+fi
+
+rm -r ${TMP_STAGING}
+
+if $DEBUG; then
+    exit 1
+fi
