@@ -45,4 +45,18 @@ In **pre-commit** file you can set:
 
 **UNIT_TESTS_BIN_PATH** - path to Codeception (*vendor/bin/codecept* by default)
 
+## Usage
+```shell script
+git commit -m "Your commit message"
+```
+### OUTPUT
+
+#### OK
+
+![image](https://user-images.githubusercontent.com/6010776/209783532-db52bec8-799d-40bf-9779-c228bd45974c.png)
+
+#### NOT OK!
+![image](https://user-images.githubusercontent.com/6010776/209783152-1287e0ed-6960-4cb7-9fd5-6bbe933c4b9e.png)
+
+
    
