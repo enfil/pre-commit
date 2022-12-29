@@ -17,9 +17,10 @@ PHP_DEPTRAC=true
 PHP_UNIT_CHECK=true
 # OTHER SETTINGS
 PHP_CS_CONFIG_PATH=phpcs.xml
+PHP_CS_BIN_PATH=vendor/bin/phpcs
 PHP_STAN_MEMORY_LIMIT=4G
 PHP_STAN_BIN_PATH=vendor/bin/phpstan
-DEPTRAC_CONFIG_FILE=deptrac.phar
+DEPTRAC_PHAR_FILE=deptrac.phar
 UNIT_TESTS_BIN_PATH=vendor/bin/codecept
 
 C_RESET='\e[0m'
@@ -55,7 +56,7 @@ done
 ##################
 printf "${C_YELLOW}[1/4]${C_RESET} code sniffer "
 if $PHP_CS_CHECK; then
-    OUTPUT_CS=$(docker exec -t --user $DOCKER_CONTAINER_USER $DOCKER_CONTAINER_NAME vendor/bin/phpcs -p --standard=$PHP_CS_CONFIG_PATH ${STAGED_FILES})
+    OUTPUT_CS=$(docker exec -t --user $DOCKER_CONTAINER_USER $DOCKER_CONTAINER_NAME $PHP_CS_BIN_PATH -p --standard=$PHP_CS_CONFIG_PATH ${STAGED_FILES})
     EXIT_CODE=$?
 
     if [[ 0 == "$EXIT_CODE" || 130 == "$EXIT_CODE" ]]; then
@@ -98,7 +99,7 @@ fi
 ##################
 printf "${C_YELLOW}[3/4]${C_RESET} deptrac "
 if $PHP_DEPTRAC; then
-    OUTPUT_DEPTRAC=$(docker exec -t --user $DOCKER_CONTAINER_USER $DOCKER_CONTAINER_NAME php -d error_reporting="E_ERROR | E_PARSE" $DEPTRAC_CONFIG_FILE analyze)
+    OUTPUT_DEPTRAC=$(docker exec -t --user $DOCKER_CONTAINER_USER $DOCKER_CONTAINER_NAME php -d error_reporting="E_ERROR | E_PARSE" $DEPTRAC_PHAR_FILE analyze)
     EXIT_CODE=$?
     if [[ 0 == "$EXIT_CODE" || 130 == "$EXIT_CODE" ]]; then
         echo -e "${C_GREEN}OK!${C_RESET}"
